@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  postgres_047:
+    image: postgres:15
+    container_name: postgres_047
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+      POSTGRES_DB: eventdb_047
+    volumes:
+      - postgres_data_047:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - event_net_047
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq_047:
+    image: rabbitmq:3-management
+    container_name: rabbitmq_047
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - event_net_047
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  backend_047:
+    build: ./backend
+    container_name: backend_047
+    env_file: ./backend/.env
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres_047:
+        condition: service_healthy
+      rabbitmq_047:
+        condition: service_healthy
+    networks:
+      - event_net_047
+    restart: on-failure
+
+  consumer_047:
+    build: ./consumer
+    container_name: consumer_047
+    env_file: ./consumer/.env
+    depends_on:
+      rabbitmq_047:
+        condition: service_healthy
+    networks:
+      - event_net_047
+    restart: on-failure
+
+networks:
+  event_net_047:
+    driver: bridge
+
+volumes:
+  postgres_data_047:
