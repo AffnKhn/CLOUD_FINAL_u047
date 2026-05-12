@@ -1,11 +1,38 @@
 # CE408L Final Exam — Live Evidence Document
 **Student:** u047 | **Exam:** Lightweight Lakehouse Logging | **Date:** 12 May 2026
 **GitHub:** https://github.com/AffnKhn/CLOUD_FINAL_u047
+**Platform:** AWS CloudShell | **Stack:** Node.js · Express · PostgreSQL · RabbitMQ · Docker
 
 ---
 
-## Evidence 1 — Docker Build & All Containers Running
+## Evidence 1 — All 4 Docker Containers Running
 
+**Command:**
+```bash
+docker compose ps
+```
+
+**Output:**
+```
+NAME           IMAGE                             COMMAND                  SERVICE        CREATED          STATUS                    PORTS
+backend_047    event-platform-047-backend_047    "docker-entrypoint.s…"   backend_047    15 minutes ago   Up 15 minutes             0.0.0.0:3000->3000/tcp
+consumer_047   event-platform-047-consumer_047   "docker-entrypoint.s…"   consumer_047   15 minutes ago   Up 15 minutes
+postgres_047   postgres:15                       "docker-entrypoint.s…"   postgres_047   16 minutes ago   Up 15 minutes (healthy)   0.0.0.0:5432->5432/tcp
+rabbitmq_047   rabbitmq:3-management             "docker-entrypoint.s…"   rabbitmq_047   16 minutes ago   Up 15 minutes (healthy)   4369/tcp, 5671/tcp, 0.0.0.0:5672->5672/tcp, 15671/tcp, 15691-15692/tcp, 25672/tcp, 0.0.0.0:15672->15672/tcp
+```
+
+**Proves:**
+- All 4 containers running on custom network `event_net_047`
+- `postgres_047` — healthy, port 5432
+- `rabbitmq_047` — healthy, ports 5672 + 15672
+- `backend_047` — up, port 3000
+- `consumer_047` — up, listening to queue
+
+---
+
+## Evidence 2 — Docker Build Success
+
+**Output:**
 ```
 [+] up 8/8
  ✔ Image event-platform-047-consumer_047       Built                   32.6s
@@ -18,13 +45,11 @@
  ✔ Container backend_047                       Started                 21.2s
 ```
 
-**Containers:** `postgres_047`, `rabbitmq_047`, `backend_047`, `consumer_047`
-**Network:** `event_net_047`
-**Volume:** `postgres_data_047`
+**Proves:** Full Docker Compose stack built and started. Network `event_net_047` and volume `postgres_data_047` created.
 
 ---
 
-## Evidence 2 — Health Check
+## Evidence 3 — Health Check
 
 **Command:**
 ```bash
@@ -36,17 +61,17 @@ curl http://localhost:3000/health
 {"status":"ok","service":"backend_047","timestamp":"2026-05-12T07:52:52.418Z"}
 ```
 
-**Proves:** Backend container running, Express server responding on port 3000.
+**Proves:** Express backend running and responding on port 3000.
 
 ---
 
-## Evidence 3 — User Registration (POST /auth/register)
+## Evidence 4 — User Registration (POST /auth/register)
 
 **Command:**
 ```bash
 curl -s -X POST http://localhost:3000/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"name":"Ali Khan","email":"ali@test.com","password":"pass123"}' | python3 -m json.tool
+  -d '{"name":"Ali Khan","email":"ali047@test.com","password":"pass123"}' | python3 -m json.tool
 ```
 
 **Output:**
@@ -54,44 +79,64 @@ curl -s -X POST http://localhost:3000/auth/register \
 {
     "message": "User registered",
     "user": {
-        "id": 1,
+        "id": 2,
         "name": "Ali Khan",
-        "email": "ali@test.com",
-        "created_at": "2026-05-12T07:52:52.544Z"
+        "email": "ali047@test.com",
+        "created_at": "2026-05-12T08:10:26.058Z"
     }
 }
 ```
 
-**Proves:** User stored in PostgreSQL `users` table. Password hashed with bcryptjs (hash not returned). Auto-incremented `id=1`.
+**Proves:** User inserted into PostgreSQL `users` table. Password hashed with bcryptjs — hash not exposed in response.
 
 ---
 
-## Evidence 4 — User Login + JWT Token (POST /auth/login)
+## Evidence 5 — User Login + JWT Token (POST /auth/login)
+
+**Command:**
+```bash
+curl -s -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"ali047@test.com","password":"pass123"}' | python3 -m json.tool
+```
+
+**Output:**
+```json
+{
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwiZW1haWwiOiJhbGkwNDdAdGVzdC5jb20iLCJpYXQiOjE3Nzg1NzM1OTEsImV4cCI6MTc3ODU4MDc5MX0._tf7rjHIVqllpDRE1-2q0CyuGrnNbEMqiI8uFatASJ0",
+    "user": {
+        "id": 2,
+        "name": "Ali Khan",
+        "email": "ali047@test.com"
+    }
+}
+```
+
+**Proves:** bcrypt hash validated. JWT issued with HS256, contains `id`, `email`, `iat`, `exp` (2h expiry).
+
+---
+
+## Evidence 6 — JWT Token Saved to Variable
 
 **Command:**
 ```bash
 TOKEN=$(curl -s -X POST http://localhost:3000/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"ali@test.com","password":"pass123"}' \
+  -d '{"email":"ali047@test.com","password":"pass123"}' \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
-
-echo "Token: $TOKEN"
+echo $TOKEN
 ```
 
 **Output:**
 ```
-Token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiZW1haWwiOiJhbGlAdGVzdC5jb20iLCJpYXQiOjE3Nzg1NzIzNzIsImV4cCI6MTc3ODU3OTU3Mn0.FAKrft9lcN91LLMosvmWpKAkS9b1ONfUwj54Sbu83Ag
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MiwiZW1haWwiOiJhbGkwNDdAdGVzdC5jb20iLCJpYXQiOjE3Nzg1NzM3OTQsImV4cCI6MTc3ODU4MDk5NH0.BQoQlAFwiu3wkXYQ5hEZz7D7otky-5iQ3gObaOWaMnI
 ```
 
-**Proves:**
-- Password validated against bcrypt hash
-- JWT issued using HS256 algorithm
-- Token contains `id`, `email`, `iat`, `exp` (2h expiry)
-- Token saved to `$TOKEN` for protected route use
+**Proves:** Token extracted and stored in `$TOKEN` shell variable for use in protected routes.
 
 ---
 
-## Evidence 5 — Create Event with JWT Auth (POST /events/create)
+## Evidence 7 — Create Event with JWT Auth (POST /events/create)
 
 **Command:**
 ```bash
@@ -106,26 +151,26 @@ curl -s -X POST http://localhost:3000/events/create \
 {
     "message": "Event created",
     "event": {
-        "id": 1,
+        "id": 2,
         "title": "Tech Summit 047",
         "description": "Cloud summit",
         "region": "us-east-1",
-        "created_by": 1,
-        "created_at": "2026-05-12T07:52:52.697Z"
+        "created_by": 2,
+        "created_at": "2026-05-12T08:17:39.061Z"
     }
 }
 ```
 
 **Proves:**
-- JWT middleware verified `Authorization: Bearer` token
+- JWT middleware verified Bearer token
 - Event inserted into PostgreSQL `events` table
-- `created_by` linked to user `id=1` (foreign key)
+- `created_by: 2` — foreign key to authenticated user
 - RabbitMQ message published to `event_created_047`
-- Log entry written to `event_logs` table
+- Log entry written to `event_logs`
 
 ---
 
-## Evidence 6 — View All Events (GET /events)
+## Evidence 8 — View All Events (GET /events)
 
 **Command:**
 ```bash
@@ -135,8 +180,17 @@ curl -s http://localhost:3000/events | python3 -m json.tool
 **Output:**
 ```json
 {
-    "count": 1,
+    "count": 2,
     "events": [
+        {
+            "id": 2,
+            "title": "Tech Summit 047",
+            "description": "Cloud summit",
+            "region": "us-east-1",
+            "created_by": 2,
+            "created_at": "2026-05-12T08:17:39.061Z",
+            "creator_name": "Ali Khan"
+        },
         {
             "id": 1,
             "title": "Tech Summit 047",
@@ -150,14 +204,11 @@ curl -s http://localhost:3000/events | python3 -m json.tool
 }
 ```
 
-**Proves:**
-- Event retrieved from PostgreSQL
-- JOIN with `users` table working (`creator_name: "Ali Khan"`)
-- Public endpoint (no JWT required)
+**Proves:** Events retrieved from PostgreSQL. JOIN with `users` table returns `creator_name`. Persistent across sessions.
 
 ---
 
-## Evidence 7 — Event Logs / Lakehouse Simulation (GET /logs)
+## Evidence 9 — Event Logs / Lakehouse Ingestion (GET /logs)
 
 **Command:**
 ```bash
@@ -167,8 +218,15 @@ curl -s http://localhost:3000/logs | python3 -m json.tool
 **Output:**
 ```json
 {
-    "count": 1,
+    "count": 2,
     "logs": [
+        {
+            "id": 2,
+            "event_id": 2,
+            "action": "event_created",
+            "message": "Event \"Tech Summit 047\" created in region \"us-east-1\" by user 2",
+            "created_at": "2026-05-12T08:17:39.064Z"
+        },
         {
             "id": 1,
             "event_id": 1,
@@ -180,15 +238,11 @@ curl -s http://localhost:3000/logs | python3 -m json.tool
 }
 ```
 
-**Proves:**
-- `event_logs` table populated on every event creation
-- Simulates lakehouse ingestion pipeline log
-- `action: "event_created"` — structured for future analytical queries
-- Linked to `event_id=1`
+**Proves:** `event_logs` table auto-populated on every event creation. Simulates lakehouse ingestion pipeline. Structured for analytical processing (`action`, `event_id`, `message`, `timestamp`).
 
 ---
 
-## Evidence 8 — Consumer Notification via RabbitMQ
+## Evidence 10 — Consumer Notification via RabbitMQ
 
 **Command:**
 ```bash
@@ -199,24 +253,21 @@ docker logs consumer_047
 ```
 [consumer_047] Listening on queue: event_created_047
 [consumer_047] Notification sent: New event 'Tech Summit 047' created in region 'us-east-1' (event_id=1)
+[consumer_047] Notification sent: New event 'Tech Summit 047' created in region 'us-east-1' (event_id=2)
 ```
 
-**Proves:**
-- `consumer_047` connected to RabbitMQ queue `event_created_047`
-- Received message published by backend on event creation
-- Asynchronous decoupled notification working
-- Message acknowledged (`ack`) after processing
+**Proves:** `consumer_047` receives and processes every message published by backend. Async decoupled notification working end-to-end.
 
 ---
 
-## Evidence 9 — RabbitMQ Queue Status (API Proof)
+## Evidence 11 — RabbitMQ Queue Proof (HTTP API)
 
 **Command:**
 ```bash
 curl -s -u guest:guest http://localhost:15672/api/queues/%2F/event_created_047 | python3 -m json.tool
 ```
 
-**Output (key fields):**
+**Key Output:**
 ```json
 {
     "name": "event_created_047",
@@ -226,8 +277,8 @@ curl -s -u guest:guest http://localhost:15672/api/queues/%2F/event_created_047 |
     "messages": 0,
     "message_stats": {
         "publish": 1,
-        "ack": 1,
-        "deliver": 1
+        "deliver": 1,
+        "ack": 1
     },
     "consumer_details": [
         {
@@ -238,10 +289,6 @@ curl -s -u guest:guest http://localhost:15672/api/queues/%2F/event_created_047 |
             "queue": {
                 "name": "event_created_047",
                 "vhost": "/"
-            },
-            "channel_details": {
-                "connection_name": "172.18.0.5:38220 -> 172.18.0.2:5672",
-                "user": "guest"
             }
         }
     ]
@@ -249,28 +296,30 @@ curl -s -u guest:guest http://localhost:15672/api/queues/%2F/event_created_047 |
 ```
 
 **Proves:**
-- Queue `event_created_047` exists and is `running`
-- `durable: true` — survives RabbitMQ restart
-- `consumers: 1` — `consumer_047` actively connected
-- `publish: 1` — backend published 1 message
-- `deliver: 1` — message delivered to consumer
-- `ack: 1` — consumer acknowledged receipt
-- `messages: 0` — queue empty (message fully processed)
+- Queue `event_created_047` exists and `state: running`
+- `durable: true` — persists across restarts
+- `consumers: 1` — consumer_047 actively connected
+- `publish: 1` — backend published message
+- `deliver: 1` — delivered to consumer
+- `ack: 1` — consumer acknowledged
+- `messages: 0` — fully processed, queue empty
 
 ---
 
-## Summary Table
+## Final Summary
 
-| # | Test | Endpoint | Result | HTTP Status |
-|---|------|----------|--------|-------------|
-| 1 | Docker up | — | All 8 resources created | — |
-| 2 | Health check | GET /health | `status: ok` | 200 |
-| 3 | Register user | POST /auth/register | User id=1 created | 201 |
-| 4 | Login + JWT | POST /auth/login | Token issued | 200 |
-| 5 | Create event | POST /events/create | Event id=1 created | 201 |
-| 6 | View events | GET /events | 1 event, with creator join | 200 |
-| 7 | View logs | GET /logs | 1 log entry recorded | 200 |
-| 8 | Consumer log | docker logs consumer_047 | Notification printed | — |
-| 9 | RabbitMQ queue | HTTP API :15672 | publish=1, ack=1, running | 200 |
+| # | Evidence | Command | Result |
+|---|----------|---------|--------|
+| 1 | 4 containers running | `docker compose ps` | All Up + Healthy |
+| 2 | Docker build success | `docker compose up --build` | `[+] up 8/8` |
+| 3 | Health check | `GET /health` | `status: ok` |
+| 4 | Register user | `POST /auth/register` | User id=2 created |
+| 5 | Login + JWT | `POST /auth/login` | Token issued (HS256) |
+| 6 | Token saved | `echo $TOKEN` | Token in shell variable |
+| 7 | Create event (JWT) | `POST /events/create` | Event id=2, auth passed |
+| 8 | View events | `GET /events` | 2 events, JOIN working |
+| 9 | View logs | `GET /logs` | 2 lakehouse log entries |
+| 10 | Consumer notification | `docker logs consumer_047` | Notifications printed |
+| 11 | RabbitMQ queue | HTTP API `:15672` | publish=1, ack=1, running |
 
-**All 9 tests PASSED.**
+**All 11 evidence points PASSED.**

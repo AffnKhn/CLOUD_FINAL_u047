@@ -3,3 +3,9 @@ node_modules/
 awscli-install.log
 *.log
 .DS_Store
+.awscli-venv/
+aws-local.cmd
+aws-local.ps1
+aws-login-from-clipboard.cmd
+aws-login-from-clipboard.ps1
+aws.cmd
